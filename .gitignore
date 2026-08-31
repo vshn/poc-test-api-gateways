@@ -1,2 +1,3 @@
 .playwright-cli/
 apisix/.generated-api-key
+kong/api-key.txt
