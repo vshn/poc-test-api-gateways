@@ -32,6 +32,7 @@ docker compose up -d
 
 First run: `kong-bootstrap` creates the schema and seeds `kong.yml` into Postgres.
 Reset to a clean slate: `docker compose down -v` (drops the `pgdata` volume), then `up -d` again.
+Wait until `docker compose ps` shows postgres/kong/idp healthy (first boot takes ~30s) before verifying.
 
 **`kong.yml` is a SEED.** Changes made via Kong Manager UI or the Admin API persist in the
 `pgdata` volume. Editing `kong.yml` after the first import does **not** re-seed anything
@@ -104,6 +105,10 @@ fallback).
 "operation unsupported" (verified), and per Kong docs "You cannot create, update, or
 delete entities with Kong Manager" in DB-less. DB mode makes Manager key creation work.
 
+UI recipe that needs this: Manager (:8082) → Consumers → create a consumer (e.g.
+`ui-created-consumer`) → Credentials → New Key Auth Credential → save the generated key
+(Manager's Admin API is writable in DB mode; in DB-less it is read-only).
+
 ## 7. Gotchas
 
 - **key-auth + anonymous**: a missing or INVALID key passes as the anonymous consumer
@@ -126,3 +131,21 @@ delete entities with Kong Manager" in DB-less. DB mode makes Manager key creatio
 - `POST /config` reload on 3.9.3 needs `Content-Type: application/yaml` + `--data-binary`
   (multipart → 400).
 - Images pinned by tag, except httpbun (digest). Re-verify healthchecks if tags bump.
+- **cookie-secret format**: the shared secret hardcoded in docker-compose.yml was generated with
+  `openssl rand -hex 16` — openssl is NOT a reproduction prerequisite. PITFALL:
+  `openssl rand -base64 32` (44 chars incl. padding/punctuation) makes oauth2-proxy v7.15.4
+  crash-loop with `cookie_secret must be 16, 24, or 32 bytes to create an AES cipher, but is 44
+  bytes` — it only accepts raw 16/24/32 bytes or unpadded base64 decoding to that. If rotating,
+  use `openssl rand -hex 16` (or `-base64 24`/`-base64 32` only if you strip padding).
+- **oauth2-proxy answers 401 (not 302) for XHR/API-style unauthenticated requests** (no redirect,
+  by design); browsers/curl without cookies get 302 to the IdP — expect both when testing.
+- **Kong Manager Overview page may show `--` placeholders**: the SPA's initial app-config XHR to
+  the Admin API (:8081) is sent WITHOUT credentials (fetch same-origin mode) → oauth2-proxy 401s
+  it (no redirect, by design) → the 401 carries no CORS headers (never reaches Kong) → browser
+  blocks it. Data-page XHRs (Consumers/Routes/…) DO carry the `_oauth2_proxy` cookie → 200 +
+  Kong's built-in CORS → render fine. A complete fix needs same-origin routing for UI+API
+  (compose redesign) — out of scope for this POC.
+- **Port sharing across parallel POC stacks**: this stack publishes 8000/8080/8081/8082 — parallel
+  stacks (e.g. apisix, which also uses 8080+8082) will conflict: affected containers fail to bind
+  and exit. Run one stack at a time, or remap the host side of the port mappings. Recovery after
+  the conflict clears: `docker compose up -d` from `kong/`.
