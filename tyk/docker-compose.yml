@@ -1,0 +1,96 @@
+services:
+  redis:
+    image: redis:7@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mongo:
+    image: mongo:7@sha256:b6421fd6d1c5ded6377b397d8983e2f82e2100dc5123332dcfda2065a472be5b
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  idp:
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.2@sha256:b538810afd589d42fbfb856c588c2065eaeed1dc528d6c532972048e67fc2aff
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+      LOG_LEVEL: "INFO"
+    ports:
+      - "18081:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/isalive"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  httpbun:
+    image: docker.io/sharat87/httpbun@sha256:538a126de2cd4235a8f1f87deb0d002791fd2d4f274033c4050961b6153a0a9a
+    restart: unless-stopped
+    # distroless, no shell -> no in-container healthcheck; verify via gateway proxy from host
+
+  gateway:
+    image: tykio/tyk-gateway:v5.14.0@sha256:d44d8c9adef92a522f258828423a2bc2f2e08dbcdf65ad67452ffbab139c8f3d
+    restart: unless-stopped
+    volumes:
+      - ./tyk.conf:/opt/tyk-gateway/tyk.conf:ro
+      - ./apps:/opt/tyk-gateway/apps:ro
+    ports:
+      - "18080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    # distroless (uid 65532, no shell) -> no in-container healthcheck; verify: curl :18080/ready
+
+  dashboard:
+    image: tykio/tyk-dashboard:v5.14.0@sha256:a674a3b2b7dd7c8842a2e3708b649348e0b59149396359279b5e554f5ab6ec5f
+    restart: unless-stopped
+    volumes:
+      - ./tyk_analytics.conf:/opt/tyk-dashboard/tyk_analytics.conf:ro
+    ports:
+      - "18083:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # no shell in image -> no in-container healthcheck; verify: curl :18083/ (license HTML, 200)
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4@sha256:b1b2021fe8f4004573e8d690dec6c7bb29cc44364572cf8510a05bf3a0ae2ded
+    restart: unless-stopped
+    command:
+      - "--http-address=0.0.0.0:4180"
+      - "--redirect-url=http://localhost:18082/oauth2/callback"
+      - "--provider=oidc"
+      - "--oidc-issuer-url=http://idp.localhost:18081/default"
+      - "--client-id=tyk-poc"
+      - "--client-secret=tyk-poc-secret"
+      - "--cookie-secret=rYHzgaSTYq4UrH5dbKcKICRrXPwlGcOQcgTKZsGZsC8"
+      - "--cookie-secure=false"
+      - "--email-domain=*"
+      - "--skip-provider-button"
+      - "--code-challenge-method=S256"
+      - "--upstream=http://dashboard:3000"
+      - "--upstream=http://gateway:8080/tyk/"
+    extra_hosts:
+      - "idp.localhost:host-gateway"
+    ports:
+      - "18082:4180"
+    depends_on:
+      idp:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+      dashboard:
+        condition: service_started
+    # no shell in image -> no in-container healthcheck; verify: curl :18082/ready
