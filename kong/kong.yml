@@ -1,0 +1,24 @@
+_format_version: "3.0"
+_transform: true
+
+consumers:
+  - username: anonymous
+    id: bb1c1e21-1b1c-4e21-9b1c-5e21bb1c1e21
+  - username: poc-client
+    keyauth_credentials:
+      - key: poc-test-key-123
+
+services:
+  - name: httpbun
+    host: httpbun
+    protocol: http
+    port: 80
+    routes:
+      - name: httpbun-route
+        paths:
+          - /httpbun
+        strip_path: true
+        plugins:
+          - name: key-auth
+            config:
+              anonymous: bb1c1e21-1b1c-4e21-9b1c-5e21bb1c1e21

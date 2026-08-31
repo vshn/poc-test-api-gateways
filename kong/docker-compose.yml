@@ -1,0 +1,142 @@
+name: poc-kong
+
+services:
+  postgres:
+    image: postgres:16.9
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kongpass
+      POSTGRES_DB: kong
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong -d kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kong-bootstrap:
+    image: kong:3.9.3
+    restart: "no"
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kongpass
+      KONG_PG_DATABASE: kong
+    volumes:
+      - ./kong.yml:/kong/kong.yml:ro
+    command: ["sh", "-c", "kong migrations bootstrap && (kong config db_import /kong/kong.yml || echo 'WARN: db_import skipped — entities already imported; reset with docker compose down -v')"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  kong:
+    image: kong:3.9.3
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kongpass
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_ADMIN_GUI_LISTEN: "0.0.0.0:8002"
+      KONG_ADMIN_GUI_URL: http://localhost:8082
+      KONG_ADMIN_GUI_API_URL: http://localhost:8081
+      KONG_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD-SHELL", "kong health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kong-bootstrap:
+        condition: service_completed_successfully
+      httpbun:
+        condition: service_started
+
+  httpbun:
+    image: docker.io/sharat87/httpbun:latest@sha256:538a126de2cd4235a8f1f87deb0d002791fd2d4f274033c4050961b6153a0a9a
+    restart: unless-stopped
+    # distroless Go image, no shell — no healthcheck possible
+
+  idp:
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.2
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: INFO
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/isalive | grep -q alive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "8080:8080"
+    networks:
+      default:
+        aliases:
+          - idp.localhost
+
+  oauth2-proxy-manager:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    restart: unless-stopped
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=http://idp.localhost:8080/default
+      - --client-id=kong-manager
+      - --client-secret=poc-secret
+      - --redirect-url=http://localhost:8082/oauth2/callback
+      - --upstream=http://kong:8002
+      - --http-address=0.0.0.0:4180
+      - "--cookie-secret=10d991c212e72331dc6bd9e7014eba16"
+      - --cookie-secure=false
+      - --email-domain=*
+      - --skip-provider-button=true
+      - --code-challenge-method=S256
+    extra_hosts:
+      - "idp.localhost:host-gateway"
+    ports:
+      - "8082:4180"
+    depends_on:
+      kong:
+        condition: service_healthy
+      idp:
+        condition: service_healthy
+
+  oauth2-proxy-admin:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    restart: unless-stopped
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=http://idp.localhost:8080/default
+      - --client-id=kong-manager
+      - --client-secret=poc-secret
+      - --redirect-url=http://localhost:8081/oauth2/callback
+      - --upstream=http://kong:8001
+      - --http-address=0.0.0.0:4180
+      - "--cookie-secret=10d991c212e72331dc6bd9e7014eba16"
+      - --cookie-secure=false
+      - --email-domain=*
+      - --skip-provider-button=true
+      - --code-challenge-method=S256
+    extra_hosts:
+      - "idp.localhost:host-gateway"
+    ports:
+      - "8081:4180"
+    depends_on:
+      kong:
+        condition: service_healthy
+      idp:
+        condition: service_healthy
+
+volumes:
+  pgdata:
