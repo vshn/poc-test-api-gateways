@@ -6,7 +6,7 @@
   <link rel="icon" href="data:,">
 </head>
 <body>
-  <h1>Sign-in</h1>
+  <h1>Sign-in as dev</h1>
   <form method="post">
     <p>
       <label for="username">Username</label><br>
@@ -16,7 +16,20 @@
       <label for="claims">Claims</label><br>
       <textarea id="claims" name="claims" rows="5" cols="60">{"email":"dev@example.com","name":"Dev User","given_name":"Dev","family_name":"User"}</textarea>
     </p>
-    <p><button type="submit">Sign-in</button></p>
+    <p><button type="submit">Sign-in as dev</button></p>
+  </form>
+
+  <h1>Sign-in as alice</h1>
+  <form method="post">
+    <p>
+      <label>Username</label><br>
+      <input name="username" value="alice">
+    </p>
+    <p>
+      <label>Claims</label><br>
+      <textarea name="claims" rows="5" cols="60">{"email":"alice@example.com","name":"Alice User","given_name":"Alice","family_name":"Secret"}</textarea>
+    </p>
+    <p><button type="submit">Sign-in as alice</button></p>
   </form>
 </body>
 </html>
