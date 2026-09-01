@@ -1,0 +1,123 @@
+name: poc-gravitee
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    # stateless PoC: no volume, no auth — down wipes all state (tyk precedent)
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  management-api:
+    image: graviteeio/apim-management-api:4.12.18
+    restart: unless-stopped
+    ports:
+      # loopback only: the console SPA (browser) calls it cross-origin; nothing else needs it
+      - "127.0.0.1:8083:8083"
+    volumes:
+      # NOTE: this REPLACES the shipped config, not merges it
+      - ./management-api/gravitee.yml:/opt/graviteeio-management-api/config/gravitee.yml:ro
+    environment:
+      gravitee_management_mongodb_uri: mongodb://mongo:27017/gravitee?serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+    extra_hosts:
+      # Alpine musl special-cases *.localhost to loopback, bypassing DNS;
+      # host-gateway routes idp.localhost to the host's published 8110.
+      - "idp.localhost:host-gateway"
+    healthcheck:
+      # /_node is NOT on 8083 in 4.x — node services moved to the core service
+      # (services.core.http, port 18083, basic admin:adminadmin per shipped config)
+      test: ["CMD-SHELL", "wget -q -O /dev/null --header 'Authorization: Basic YWRtaW46YWRtaW5hZG1pbg==' http://127.0.0.1:18083/_node/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  gateway:
+    image: graviteeio/apim-gateway:4.12.18
+    restart: unless-stopped
+    ports:
+      - "9082:8082"
+    environment:
+      # BOTH uris required: ratelimit defaults to localhost and fails without it
+      gravitee_management_mongodb_uri: mongodb://mongo:27017/gravitee?serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      gravitee_ratelimit_mongodb_uri: mongodb://mongo:27017/gravitee?serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000
+      gravitee_reporters_elasticsearch_enabled: "false"
+    healthcheck:
+      # core service on 18082 (services.core.http, basic admin:adminadmin), not /_node on 8082
+      test: ["CMD-SHELL", "wget -q -O /dev/null --header 'Authorization: Basic YWRtaW46YWRtaW5hZG1pbg==' http://127.0.0.1:18082/_node/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  management-ui:
+    image: graviteeio/apim-management-ui:4.12.18
+    restart: unless-stopped
+    ports:
+      - "8084:8080"
+    environment:
+      MGMT_API_URL: http://localhost:8083/management/organizations/DEFAULT/environments/DEFAULT/
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      management-api:
+        condition: service_healthy
+
+  portal-ui:
+    image: graviteeio/apim-portal-ui:4.12.18
+    restart: unless-stopped
+    ports:
+      - "8085:8080"
+    environment:
+      PORTAL_API_URL: http://localhost:8083/portal/environments/DEFAULT
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      management-api:
+        condition: service_healthy
+
+  idp:
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.2
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8110"
+      JSON_CONFIG_PATH: /opt/mock/config.json
+    ports:
+      # uniform-port trick: browser hits it via host loopback, containers via the
+      # idp.localhost network alias — same URL works from both sides
+      - "8110:8110"
+    volumes:
+      - ./idp/:/opt/mock/:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8110/isalive | grep -q alive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      default:
+        aliases:
+          - idp.localhost
+
+  httpbun:
+    image: docker.io/sharat87/httpbun:latest@sha256:538a126de2cd4235a8f1f87deb0d002791fd2d4f274033c4050961b6153a0a9a
+    restart: unless-stopped
+    # distroless Go image (scratch), no shell — no healthcheck possible
