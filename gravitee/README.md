@@ -1,7 +1,7 @@
 # Gravitee APIM 4.x — OIDC-gated Console POC
 
 Gravitee APIM 4.12.18 (Community Edition) with **native OIDC login on the Console** —
-no oauth2-proxy in front. Management API + Gateway on MongoDB 7 (stateless), mock-OAuth2-Server
+no oauth2-proxy in front. Management API + Gateway on MongoDB 7, mock-OAuth2-Server
 as IdP, httpbun as upstream demo API. V4 proxy API created via the v2 Management API with a
 keyless plan.
 
