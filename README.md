@@ -11,9 +11,10 @@ and an API-key-protected data plane.
 
 | Directory  | Gateway                                             | Summary                                            |
 | ---------- | --------------------------------------------------- | -------------------------------------------------- |
+| `apisix/`   | APISIX 3.18 + etcd                                  | Built-in `/ui/` behind oauth2-proxy                 |
 | `gravitee/` | Gravitee APIM 4.x CE (MongoDB)                      | Native OIDC console login, no oauth2-proxy          |
 | `kong/`     | Kong OSS 3.9 DB-mode + Postgres                     | Manager/Admin API behind oauth2-proxy               |
 | `tyk/`      | Tyk Gateway + Dashboard v5.14                       | Dashboard unlicensed                                |
 
 For details, findings and gotchas see each subdirectory's `README.md`:
-`gravitee/README.md`, `kong/README.md`, `tyk/README.md`.
+`apisix/README.md`, `gravitee/README.md`, `kong/README.md`, `tyk/README.md`.

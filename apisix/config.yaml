@@ -1,0 +1,17 @@
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    admin_key:
+      - name: admin
+        key: admin-key-poc-apisix-9f3c2a71
+        role: admin
+    allow_admin:
+      - 0.0.0.0/0
+  etcd:
+    host:
+      - http://etcd:2379
+plugins:
+  - proxy-rewrite
+  - key-auth
