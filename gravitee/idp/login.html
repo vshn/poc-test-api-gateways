@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign-in · mock IdP</title>
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <h1>Sign-in</h1>
+  <form method="post">
+    <p>
+      <label for="username">Username</label><br>
+      <input id="username" name="username" value="dev">
+    </p>
+    <p>
+      <label for="claims">Claims</label><br>
+      <textarea id="claims" name="claims" rows="5" cols="60">{"email":"dev@example.com","name":"Dev User","given_name":"Dev","family_name":"User"}</textarea>
+    </p>
+    <p><button type="submit">Sign-in</button></p>
+  </form>
+</body>
+</html>
