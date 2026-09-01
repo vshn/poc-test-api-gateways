@@ -24,7 +24,27 @@
     box-shadow: 0 1px 4px rgba(0,0,0,.08);
   }
   h2 { margin-bottom: .25rem; }
+  h3 { margin-bottom: .5rem; font-size: 1rem; }
   p.hint { color: #666; font-size: .8rem; margin-bottom: 1.25rem; }
+  fieldset {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .quick button {
+    display: block;
+    width: 100%;
+    margin-top: .5rem;
+    padding: .5rem;
+    border: 1px solid #0366d6;
+    border-radius: 4px;
+    background: #f4f8fe;
+    color: #0366d6;
+    font-size: .9rem;
+    cursor: pointer;
+  }
+  .quick button:hover { background: #e6f0fc; }
   label { display: block; font-size: .85rem; font-weight: 600; margin: 1rem 0 .25rem; }
   input[type="text"], textarea {
     width: 100%;
@@ -35,7 +55,7 @@
     font-size: .85rem;
   }
   textarea { resize: vertical; min-height: 7rem; }
-  button {
+  button.submit {
     margin-top: 1.25rem;
     width: 100%;
     padding: .6rem;
@@ -46,24 +66,36 @@
     font-size: 1rem;
     cursor: pointer;
   }
-  button:hover { background: #0250b2; }
+  button.submit:hover { background: #0250b2; }
 </style>
 </head>
 <body>
 <div class="card">
   <h2>Mock OAuth2 Server Sign-in</h2>
-  <p class="hint">Prefilled for POC — edit if needed.</p>
-  <form method="post">
+  <p class="hint">One click for POC users — or edit below.</p>
+  <fieldset class="quick">
+    <h3>POC users</h3>
+    <button type="button" onclick="signIn('dev@example.com')">Sign in as dev@example.com</button>
+    <button type="button" onclick="signIn('alice@example.com')">Sign in as alice@example.com</button>
+  </fieldset>
+  <form method="post" id="login-form">
     <label for="username">Username</label>
     <input id="username" type="text" name="username" required autofocus>
     <label for="claims">Claims (JSON)</label>
     <textarea id="claims" name="claims"></textarea>
-    <button type="submit">Sign-in</button>
+    <button type="submit" class="submit">Sign-in</button>
   </form>
 </div>
 <script>
-  document.getElementById('username').value = 'dev@example.com';
-  document.getElementById('claims').value = JSON.stringify({email: 'dev@example.com'}, null, 2);
+  function setIdentity(email) {
+    document.getElementById('username').value = email;
+    document.getElementById('claims').value = JSON.stringify({email: email}, null, 2);
+  }
+  function signIn(email) {
+    setIdentity(email);
+    document.getElementById('login-form').submit();
+  }
+  setIdentity('dev@example.com');
 </script>
 </body>
 </html>
