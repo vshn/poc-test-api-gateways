@@ -9,11 +9,11 @@ AUTH="-u ${ADMIN_USER}:${ADMIN_PASS}"
 ENVS="organizations/DEFAULT/environments/DEFAULT"
 
 echo "==> Checking management API auth (${ADMIN_USER}:${ADMIN_PASS})"
-APIS=$(curl -sf $AUTH "${MAPI}/${ENVS}/apis")
+APIS=$(curl -sf $AUTH "${MAPI}/v2/${ENVS}/apis")
 echo "    auth OK"
 
 echo "==> Creating V4 proxy API 'httpbun PoC API'"
-API_ID=$(echo "$APIS" | jq -r '.[] | select(.name=="httpbun PoC API") | .id' | head -1)
+API_ID=$(echo "$APIS" | jq -r '.data[] | select(.name=="httpbun PoC API") | .id' | head -1)
 if [ -z "$API_ID" ]; then
   API_ID=$(curl -sf $AUTH -X POST \
     -H 'Content-Type: application/json' \
