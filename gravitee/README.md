@@ -43,8 +43,8 @@ Then seed the demo API:
 ./setup-api.sh
 ```
 
-The script is idempotent-ish (skips API creation if the name exists), but plan creation is not —
-for a clean slate `docker compose down && docker compose up -d` first (mongo is stateless, no volume).
+The script is fully re-runnable: existing API and Keyless plan are detected and reused,
+so it completes cleanly even on a second run (mongo is stateless, no volume).
 
 ## 3. Ports
 

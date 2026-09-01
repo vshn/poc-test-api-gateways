@@ -44,27 +44,38 @@ if [ -z "$API_ID" ]; then
   echo "    created API id=${API_ID}"
 else
   echo "    already exists, id=${API_ID}"
+  STATE=$(echo "$APIS" | jq -r --arg id "$API_ID" '.data[] | select(.id==$id) | .state')
 fi
 
 echo "==> Creating Keyless plan"
-PLAN_ID=$(curl -sf $AUTH -X POST \
-  -H 'Content-Type: application/json' \
-  "${MAPI}/v2/${ENVS}/apis/${API_ID}/plans" \
-  -d '{
-    "definitionVersion": "V4",
-    "name": "Keyless",
-    "security": {"type": "KEY_LESS"},
-    "mode": "STANDARD"
-  }' | jq -r '.id')
-echo "    plan id=${PLAN_ID}"
+PLANS=$(curl -sf $AUTH "${MAPI}/v2/${ENVS}/apis/${API_ID}/plans")
+PLAN_ID=$(echo "$PLANS" | jq -r '.data[] | select(.name=="Keyless") | .id' | head -1)
+if [ -z "$PLAN_ID" ]; then
+  PLAN_ID=$(curl -sf $AUTH -X POST \
+    -H 'Content-Type: application/json' \
+    "${MAPI}/v2/${ENVS}/apis/${API_ID}/plans" \
+    -d '{
+      "definitionVersion": "V4",
+      "name": "Keyless",
+      "security": {"type": "KEY_LESS"},
+      "mode": "STANDARD"
+    }' | jq -r '.id')
+  echo "    created plan id=${PLAN_ID}"
 
-echo "==> Publishing plan"
-curl -sf $AUTH -X POST "${MAPI}/v2/${ENVS}/apis/${API_ID}/plans/${PLAN_ID}/_publish" > /dev/null
-echo "    published"
+  echo "==> Publishing plan"
+  curl -sf $AUTH -X POST "${MAPI}/v2/${ENVS}/apis/${API_ID}/plans/${PLAN_ID}/_publish" > /dev/null
+  echo "    published"
+else
+  echo "    already exists, id=${PLAN_ID}"
+fi
 
 echo "==> Starting API"
-curl -sf $AUTH -X POST "${MAPI}/v2/${ENVS}/apis/${API_ID}/_start" > /dev/null
-echo "    started"
+if [ "${STATE:-}" = "STARTED" ]; then
+  echo "    already started"
+else
+  curl -sf $AUTH -X POST "${MAPI}/v2/${ENVS}/apis/${API_ID}/_start" > /dev/null
+  echo "    started"
+fi
 
 echo "==> Waiting 6s for gateway to sync from mongo"
 sleep 6
