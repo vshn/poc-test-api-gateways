@@ -1,0 +1,80 @@
+name: poc-apisix
+
+services:
+  etcd:
+    image: bitnamilegacy/etcd:3.5.21-debian-12-r6   # bitnami/etcd has zero Hub tags (Aug 2025 → bitnamilegacy)
+    restart: unless-stopped
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "yes"
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  apisix:
+    image: apache/apisix:3.18.0-debian
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    ports:
+      - "9080:9080"   # data plane — unauthenticated by design
+      - "9180:9180"   # admin API + built-in UI /ui/ — direct, un-gated (PoC risk)
+    healthcheck:      # no curl in image → bash /dev/tcp raw probe (validates etcd too);
+                      # CMD-SHELL runs dash (no /dev/tcp), so bash is invoked explicitly
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9180 && printf 'GET /apisix/admin/routes HTTP/1.0\\r\\nHost: localhost\\r\\nX-API-KEY: admin-key-poc-apisix-9f3c2a71\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      etcd:
+        condition: service_healthy   # entrypoint runs init_etcd under set -e
+
+  httpbun:
+    # digest-ONLY form — ":latest@sha256:..." FAILS (latest moved Aug 2026); distroless, no healthcheck possible
+    image: docker.io/sharat87/httpbun@sha256:538a126de2cd4235a8f1f87deb0d002791fd2d4f274033c4050961b6153a0a9a
+    restart: unless-stopped
+
+  idp:
+    image: ghcr.io/navikt/mock-oauth2-server:6.0.2
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: INFO
+      JSON_CONFIG: '{"interactiveLogin": true, "loginPagePath": "/work/login.html"}'
+    volumes:
+      - ./idp-login.html:/work/login.html:ro
+    ports:
+      - "8180:8080"
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    restart: unless-stopped
+    volumes:
+      - ./oauth2-proxy/alpha-config.yaml:/etc/oauth2-proxy/alpha.yaml:ro
+      - ./oauth2-proxy/admin-key:/etc/oauth2-proxy/admin-key:ro
+    # --provider/--oidc-issuer-url/--client-id/--client-secret/--code-challenge-method/
+    # --http-address/--upstream moved into alpha-config.yaml — they FATAL if kept
+    # alongside --alpha-config (only flags with an alpha equivalent are banned)
+    command:
+      - --alpha-config=/etc/oauth2-proxy/alpha.yaml
+      - --redirect-url=http://localhost:8282/oauth2/callback
+      - "--cookie-secret=f9be274e4fadac927fa8d30df735228f"   # 32 raw bytes (hex); base64-of-32B output is 44 chars → rejected
+      - --cookie-secure=false
+      # unique cookie name — all three PoC gates share host localhost (ports are not
+      # cookie-scoped); with the default _oauth2_proxy name, kong/tyk/stale cookies
+      # clobber this gate's session and CSRF cookie → login loops / 403 at callback
+      - --cookie-name=apisix_oauth2_proxy
+      - --email-domain=*
+      - --skip-provider-button
+    ports:
+      - "8282:4180"   # OIDC-gated admin API + /ui/
+    extra_hosts:
+      - "idp.localhost:host-gateway"   # issuer Host header must match the browser URL;
+                                       # host-gateway routes oauth2-proxy → host → published 8180
+                                       # so both legs present the same Host (compose alias replaced)
+    depends_on:
+      apisix:
+        condition: service_healthy
+      idp:
+        condition: service_started
