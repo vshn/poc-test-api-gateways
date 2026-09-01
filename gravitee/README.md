@@ -86,11 +86,14 @@ on the compose network with `SERVER_PORT=8110`. Browser → `http://idp.localhos
 published port. One URL works from both worlds, so the config (tokenEndpoint etc.) has no
 dual entries.
 
-**Logout (as observed):** the console's Sign Out clears the console session and returns to
-the login page. It does **NOT** redirect to the IdP `end_session` endpoint —
-`userLogoutEndpoint` was not honored in this client-side SSO flow. The IdP session
-(persisted as a cookie on `idp.localhost`) survives, so clicking mockoidc again logs
-straight back in without the form.
+**Logout (as observed):** Sign Out clears the console session **and** redirects through the
+IdP end-session endpoint — `userLogoutEndpoint` IS honored: (1) `POST
+/management/organizations/DEFAULT/user/logout` → 200; (2) browser GET
+`http://idp.localhost:8110/default/endsession?id_token_hint=<ID_TOKEN>&post_logout_redirect_uri=http%3A%2F%2Flocalhost%3A8084%23%21%2F_login`
+→ 302, no confirmation screen (mock-oauth2-server accepts and redirects immediately);
+(3) back at `http://localhost:8084/#!/_login`. Re-login ALWAYS re-shows the prefilled
+form — `interactiveLogin: true` never sets an IdP session cookie, so no silent re-auth;
+every login is a deterministic one-click.
 
 Useful URLs:
 - Discovery: http://idp.localhost:8110/default/.well-known/openid-configuration
