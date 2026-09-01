@@ -56,8 +56,11 @@ Wait until `docker compose ps` shows postgres/kong/idp healthy (first boot takes
 2. Redirect to the IdP login form (issuer: `http://idp.localhost:8080/default`).
    Client pair: `kong-manager` / `poc-secret` (the IdP accepts ANY pair; this fixed
    one is for the debugger).
-3. Enter any username and claims JSON: `{"email":"dev@example.com"}` — an **email is
-   required**: oauth2-proxy reads it from the ID token.
+3. The form comes PRE-FILLED (username `dev@example.com` + claims
+   `{"email":"dev@example.com"}`) — served by the custom login page `kong/login.html`
+   via mock-oauth2-server's `loginPagePath` (navikt/mock-oauth2-server#696) — just
+   click **Sign-in**. The email claim is why the prefill exists: oauth2-proxy reads
+   the email from the ID token and rejects logins without it.
 4. Done — you are logged in on **both** ports. Both oauth2-proxy instances share the
    same `--cookie-secret`, and the `_oauth2_proxy` cookie is host-scoped (`localhost`),
    not port-scoped.
@@ -138,14 +141,21 @@ UI recipe that needs this: Manager (:8082) → Consumers → create a consumer (
   bytes` — it only accepts raw 16/24/32 bytes or unpadded base64 decoding to that. If rotating,
   use `openssl rand -hex 16` (or `-base64 24`/`-base64 32` only if you strip padding).
 - **oauth2-proxy answers 401 (not 302) for XHR/API-style unauthenticated requests** (no redirect,
-  by design); browsers/curl without cookies get 302 to the IdP — expect both when testing.
-- **Kong Manager Overview page may show `--` placeholders**: the SPA's initial app-config XHR to
-  the Admin API (:8081) is sent WITHOUT credentials (fetch same-origin mode) → oauth2-proxy 401s
-  it (no redirect, by design) → the 401 carries no CORS headers (never reaches Kong) → browser
-  blocks it. Data-page XHRs (Consumers/Routes/…) DO carry the `_oauth2_proxy` cookie → 200 +
-  Kong's built-in CORS → render fine. A complete fix needs same-origin routing for UI+API
-  (compose redesign) — out of scope for this POC.
+  by design); browsers/curl without cookies get 302 to the IdP — expect both when testing. Still
+  true for everything except the skipped root route (`GET /` on :8081) and forwarded preflights.
+- **Kong Manager Overview page `--` placeholders / CORS — fixed**. Root cause: the SPA's cookieless
+  boot call `GET /` to the Admin API (:8081) hit the oauth2-proxy gate → 401 without CORS headers
+  (never reached Kong) → browser blocked it; cross-origin JSON POSTs broke the same way in real
+  browsers (cookieless OPTIONS preflight → 302 instead of a CORS answer). Fix (oauth2-proxy-admin
+  only): `--skip-auth-route=GET=^/$` makes just the Admin API root metadata endpoint public, and
+  `--skip-auth-preflight=true` forwards preflights to Kong, which answers 204 + CORS. **Security
+  tradeoff**: the Admin API root (version/plugin metadata) is publicly readable through :8081, and
+  preflight OPTIONS are forwarded unauthenticated — Kong's CORS answers only, no data behind them.
+  Data-page XHRs (Consumers/Routes/…) carry the `_oauth2_proxy` cookie and stay gated as before.
+- **`--skip-auth-route` separator is `=`** (e.g. `GET=^/$`); the `:` form silently mis-parses —
+  accepted but logs show `Method: <empty>` and the route stays gated.
 - **Port sharing across parallel POC stacks**: this stack publishes 8000/8080/8081/8082 — parallel
   stacks (e.g. apisix, which also uses 8080+8082) will conflict: affected containers fail to bind
   and exit. Run one stack at a time, or remap the host side of the port mappings. Recovery after
-  the conflict clears: `docker compose up -d` from `kong/`.
+  the conflict clears: `docker compose up -d` from `kong/`. The apisix stack was since remapped to
+  host ports 8180/8282/9080/9180, so kong and apisix now run simultaneously.

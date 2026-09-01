@@ -73,6 +73,9 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: INFO
+      JSON_CONFIG: '{"interactiveLogin":true,"httpServer":"NettyWrapper","loginPagePath":"/app/login/login.html"}'
+    volumes:
+      - ./login.html:/app/login/login.html:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/isalive | grep -q alive"]
       interval: 10s
@@ -128,6 +131,8 @@ services:
       - --email-domain=*
       - --skip-provider-button=true
       - --code-challenge-method=S256
+      - '--skip-auth-route=GET=^/$'
+      - '--skip-auth-preflight=true'
     extra_hosts:
       - "idp.localhost:host-gateway"
     ports:
