@@ -132,6 +132,7 @@ services:
       - --skip-provider-button=true
       - --code-challenge-method=S256
       - '--skip-auth-route=GET=^/$'
+      - '--skip-auth-route=GET=^/consumers/[^/?]+$'
       - '--skip-auth-preflight=true'
     extra_hosts:
       - "idp.localhost:host-gateway"
