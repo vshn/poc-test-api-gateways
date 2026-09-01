@@ -148,10 +148,16 @@ UI recipe that needs this: Manager (:8082) → Consumers → create a consumer (
   (never reached Kong) → browser blocked it; cross-origin JSON POSTs broke the same way in real
   browsers (cookieless OPTIONS preflight → 302 instead of a CORS answer). Fix (oauth2-proxy-admin
   only): `--skip-auth-route=GET=^/$` makes just the Admin API root metadata endpoint public, and
-  `--skip-auth-preflight=true` forwards preflights to Kong, which answers 204 + CORS. **Security
-  tradeoff**: the Admin API root (version/plugin metadata) is publicly readable through :8081, and
-  preflight OPTIONS are forwarded unauthenticated — Kong's CORS answers only, no data behind them.
+  `--skip-auth-preflight=true` forwards preflights to Kong, which answers 204 + CORS.
   Data-page XHRs (Consumers/Routes/…) carry the `_oauth2_proxy` cookie and stay gated as before.
+- **Two skipped routes on the Admin API proxy** (`--skip-auth-route`, oauth2-proxy-admin only):
+  - `GET ^/$` — Admin API root (version/plugin metadata): public.
+  - `GET ^/consumers/[^/?]+$` — single consumer metadata (id, username, custom_id, tags,
+    timestamps) readable by anyone who knows the UUID; credentials/keys and ALL writes stay gated
+    (method-scoped to GET, sub-paths like `/consumers/<id>/key-auth` excluded). Why: Kong Manager's
+    credentials/plugins tabs fetch the consumer heading cookielessly (SPA main-axios has no
+    withCredentials) — the last cookieless call in the SPA (full-page sweep of all 12 sections
+    verified).
 - **`--skip-auth-route` separator is `=`** (e.g. `GET=^/$`); the `:` form silently mis-parses —
   accepted but logs show `Method: <empty>` and the route stays gated.
 - **Port sharing across parallel POC stacks**: this stack publishes 8000/8080/8081/8082 — parallel
