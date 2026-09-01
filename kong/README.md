@@ -158,6 +158,12 @@ UI recipe that needs this: Manager (:8082) → Consumers → create a consumer (
     credentials/plugins tabs fetch the consumer heading cookielessly (SPA main-axios has no
     withCredentials) — the last cookieless call in the SPA (full-page sweep of all 12 sections
     verified).
+- **Consumers page console noise (cosmetic, by design)**: on full page loads of `/consumers` the
+  SPA fires a cookieless collection probe `GET /consumers` → oauth2-proxy 401 without CORS
+  headers → 2 console CORS errors; the page still fully loads via the credentialed
+  `GET /consumers?sort_desc=1&size=30` → 200. Intentionally NOT skip-auth'd — the collection
+  endpoint lists consumer usernames (public single-consumer-by-UUID metadata is the documented
+  limit above). Client-side SPA navigation doesn't re-fire the probe.
 - **`--skip-auth-route` separator is `=`** (e.g. `GET=^/$`); the `:` form silently mis-parses —
   accepted but logs show `Method: <empty>` and the route stays gated.
 - **Port sharing across parallel POC stacks**: this stack publishes 8000/8080/8081/8082 — parallel
